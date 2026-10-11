@@ -8,6 +8,7 @@
 
 #include <minecraft:dynamictransforms.glsl>
 #include <minecraft:projection.glsl>
+#include <minecraft:globals.glsl>
 
 layout(location = 0) in vec3 Position;
 layout(location = 1) in vec4 Color;
@@ -33,11 +34,15 @@ void main() {
     bool biomeShadow = all(lessThan(abs(Color.rgb - vec3(63.0, 63.0, 62.0) / 255.0), vec3(0.001)));
     if (biomeTitle || biomeShadow) {
         vec2 screen = vec2(2.0 / ProjMat[0][0], -2.0 / ProjMat[1][1]);
-        // Title glyphs are at most 200 x 56; vanilla titles use scale 4 and y = -10.
-        float scale = min(1.0, min(screen.x * 0.9 / 800.0, screen.y * 0.4 / 224.0));
+        // Two 133 x 68 glyphs form a card; vanilla titles use scale 4 and y = -10.
+        vec2 guiPerFramebufferPixel = screen / ScreenSize;
+        float pixelsPerTexel = max(1.0, floor(min(4.0 / guiPerFramebufferPixel.x,
+            min(ScreenSize.x * 0.9 / 266.0, ScreenSize.y * 0.4 / 68.0))));
         vec2 center = floor(screen * 0.5);
-        position.x = (position.x - center.x) * scale + center.x;
-        position.y = (position.y - center.y + 40.0) * scale + 12.0;
+        // Work in framebuffer pixels so both axes have exactly the same texel size.
+        vec2 pixelPosition = (position.xy - center + vec2(0.0, 40.0)) * pixelsPerTexel / 4.0;
+        pixelPosition += vec2(center.x / guiPerFramebufferPixel.x, 12.0 / guiPerFramebufferPixel.y);
+        position.xy = round(pixelPosition) * guiPerFramebufferPixel;
     }
 #endif
     gl_Position = ProjMat * position;

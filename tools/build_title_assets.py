@@ -64,32 +64,45 @@ def build(client_jar, ru_lang):
             for biome in biomes:
                 words = translations[f'biome.minecraft.{biome}'].split()
                 lines = [text_image(' '.join(words[i:i + 2])) for i in range(0, len(words), 2)]
-                lines = [line.resize((round(line.width * 1.5), 18), Image.Resampling.NEAREST) for line in lines]
+                lines = [line.resize((line.width * 2, 24), Image.Resampling.NEAREST) for line in lines]
                 width = max(heading.width, *(line.width for line in lines))
-                card = Image.new('RGBA', (width, 14 + 21 * len(lines)))
+                card = Image.new('RGBA', (width, 14 + 27 * len(lines)))
                 card.alpha_composite(heading, ((width - heading.width) // 2, 0))
                 for i, line in enumerate(lines):
-                    card.alpha_composite(line, ((width - line.width) // 2, 14 + 21 * i))
+                    card.alpha_composite(line, ((width - line.width) // 2, 14 + 27 * i))
                 cards[language, biome] = card
 
-        cell_width = max(card.width for card in cards.values())
+        card_width = max(card.width for card in cards.values())
+        card_width += card_width % 2
+        cell_width = card_width // 2
         cell_height = max(card.height for card in cards.values())
         assert cell_width <= 256 and cell_height <= 256, 'Glyph must fit the Minecraft font atlas'
-        font_providers = []
+        font_providers = [{'type': 'space', 'advances': {'\uf000': -1}}]
         for language_index, language in enumerate(languages):
-            atlas = Image.new('RGBA', (cell_width * 8, cell_height * math.ceil(len(biomes) / 8)))
+            atlas = Image.new('RGBA', (cell_width * 8, cell_height * math.ceil(len(biomes) * 2 / 8)))
             chars = []
             lang_path = ASSETS / f'lang/{language}.json'
             lang = json.loads(lang_path.read_text())
             # Keep descriptions; regenerate only the title translation keys.
             lang = {key: value for key, value in lang.items() if not key.startswith('biomevisible.title.')}
             for i, biome in enumerate(biomes):
-                char = chr(0xE000 + language_index * len(biomes) + i)
-                lang[f'biomevisible.title.biome.minecraft.{biome}'] = char
-                if i % 8 == 0:
-                    chars.append('')
-                chars[-1] += char
-                atlas.alpha_composite(cards[language, biome], ((i % 8) * cell_width, (i // 8) * cell_height))
+                # Two glyphs keep the 2x biome pixels within Minecraft's 256px font atlas.
+                card = Image.new('RGBA', (card_width, cell_height))
+                source = cards[language, biome]
+                card.alpha_composite(source, ((card_width - source.width) // 2, 0))
+                title_chars = []
+                for half in range(2):
+                    index = i * 2 + half
+                    char = chr(0xE000 + language_index * len(biomes) * 2 + index)
+                    title_chars.append(char + '\uf000')
+                    if index % 8 == 0:
+                        chars.append('')
+                    chars[-1] += char
+                    tile = card.crop((half * cell_width, 0, (half + 1) * cell_width, cell_height))
+                    # Nonzero alpha fixes the glyph advance; the fragment shader discards it.
+                    tile.putpixel((cell_width - 1, cell_height - 1), (255, 255, 255, 1))
+                    atlas.alpha_composite(tile, ((index % 8) * cell_width, (index // 8) * cell_height))
+                lang[f'biomevisible.title.biome.minecraft.{biome}'] = ''.join(title_chars)
             chars[-1] = chars[-1].ljust(8, '\0')
             png = io.BytesIO()
             atlas.save(png, format='PNG')

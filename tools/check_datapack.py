@@ -160,29 +160,32 @@ for biome in biomes:
 require(len(advancements) == len(biomes), "Unexpected extra advancement marker")
 title_font_path = resource_root / "assets/biomevisible/font/title.json"
 providers = resource_documents.get(title_font_path, {}).get("providers", [])
-require(len(providers) == 2, "Title font must contain English and Russian atlases")
+require(len(providers) == 3, "Title font must contain spacing and English/Russian atlases")
+require(providers[0] == {"type": "space", "advances": {"\uf000": -1}}, "Title halves must cancel the vanilla one-pixel glyph spacing")
 for language_index, language in enumerate(("en_us", "ru_ru")):
-    provider = providers[language_index]
+    provider = providers[language_index + 1]
     require(provider.get("type") == "bitmap", "Title provider must use bitmap glyphs")
     require(provider.get("file") == f"biomevisible:font/titles_{language}.png", "Wrong title atlas")
-    require(provider.get("ascent") == 7 and provider.get("height") == 56, "Title geometry must match the shader")
+    require(provider.get("ascent") == 7 and provider.get("height") == 68, "Title geometry must match the shader")
     rows = provider.get("chars", [])
-    require(len(rows) == 9 and all(len(row) == 8 for row in rows), "Atlas must contain 8 x 9 cells")
+    require(len(rows) == 17 and all(len(row) == 8 for row in rows), "Atlas must contain 8 x 17 cells")
     glyphs = "".join(rows).replace("\0", "")
-    expected = "".join(chr(0xE000 + language_index * len(biomes) + i) for i in range(len(biomes)))
+    expected = "".join(chr(0xE000 + language_index * len(biomes) * 2 + i) for i in range(len(biomes) * 2))
     require(glyphs == expected, "Title glyphs must cover each biome exactly once")
     lang = resource_documents[resource_root / f"assets/biomevisible/lang/{language}.json"]
     title_keys = {key for key in lang if key.startswith("biomevisible.title.")}
     require(title_keys == {f"biomevisible.title.biome.minecraft.{biome}" for biome in biomes}, "Title translations must cover all biomes")
     for i, biome in enumerate(biomes):
-        require(lang[f"biomevisible.title.biome.minecraft.{biome}"] == expected[i], f"Wrong {language} glyph for {biome}")
+        require(lang[f"biomevisible.title.biome.minecraft.{biome}"] == expected[i * 2] + "\uf000" + expected[i * 2 + 1] + "\uf000", f"Wrong {language} glyph for {biome}")
     png = (resource_root / f"assets/biomevisible/textures/font/titles_{language}.png").read_bytes()
     require(png[:8] == b"\x89PNG\r\n\x1a\n", "Title atlas must be PNG")
-    require(struct.unpack(">II", png[16:24]) == (1600, 504), "Atlas dimensions must match title geometry")
+    require(struct.unpack(">II", png[16:24]) == (1064, 1156), "Atlas dimensions must match title geometry")
 shader = (resource_root / "assets/minecraft/shaders/core/text.vsh").read_text()
 require("#ifdef IS_GUI" in shader and "biomeTitle || biomeShadow" in shader, "Title positioning must only target marked GUI text")
-require("screen.x * 0.9 / 800.0" in shader and "screen.y * 0.4 / 224.0" in shader, "Title must fit within the window")
-require("position.y - center.y + 40.0" in shader and "* scale + 12.0" in shader, "Title must anchor 12 GUI pixels below the top")
+require("ScreenSize.x * 0.9 / 266.0" in shader and "ScreenSize.y * 0.4 / 68.0" in shader, "Title must fit within the window")
+require("vec2(0.0, 40.0)" in shader and "12.0 / guiPerFramebufferPixel.y" in shader, "Title must anchor 12 GUI pixels below the top")
+
+require("floor(min(4.0 / guiPerFramebufferPixel.x" in shader and "round(pixelPosition)" in shader, "Title texels and origins must align with framebuffer pixels")
 
 send_title = (pack_root / "data/biomevisible/function/player/send_title.mcfunction").read_text(encoding="utf-8")
 send_lines = send_title.splitlines()

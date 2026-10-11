@@ -1,0 +1,54 @@
+name: Release packs
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'datapack/**'
+      - 'resourcepack/**'
+      - 'tools/build_release.py'
+      - '.github/workflows/release.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: pack-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    if: github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Find previous published release
+        id: previous
+        run: |
+          tag=$(gh release list --exclude-drafts --exclude-pre-releases --limit 1 --json tagName --jq '.[0].tagName // ""')
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Validate versions and build changed packs
+        id: build
+        env:
+          PREVIOUS_TAG: ${{ steps.previous.outputs.tag }}
+        run: python3 tools/build_release.py --previous-tag "$PREVIOUS_TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Publish release
+        if: steps.build.outputs.release == 'true'
+        env:
+          RELEASE_TAG: ${{ steps.build.outputs.tag }}
+          RELEASE_VERSION: ${{ steps.build.outputs.version }}
+        run: |
+          gh release create "$RELEASE_TAG" dist/*.zip \
+            --target "$GITHUB_SHA" \
+            --title "BiomeVisible v$RELEASE_VERSION" \
+            --notes-file dist/release-notes.md \
+            --latest

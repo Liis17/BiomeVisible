@@ -237,7 +237,7 @@ header_index = next((i for i, line in enumerate(send_lines) if "title @s title "
 require(subtitle_index >= 0 and header_index > subtitle_index, "Subtitle must be sent before the header title trigger")
 require(
     "store success score @s bv.ok run title @s subtitle " in send_lines[subtitle_index]
-    and any("unless score @s bv.ok matches 1 run return 0" in line for line in send_lines[subtitle_index + 1 : header_index]),
+    and any("unless score @s bv.ok matches 1 run return fail" in line for line in send_lines[subtitle_index + 1 : header_index]),
     "Title trigger must be skipped when subtitle sending fails",
 )
 require("return run title @s title " in send_lines[header_index], "Title function must return header command success")

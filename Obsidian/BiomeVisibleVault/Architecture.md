@@ -4,7 +4,7 @@ Parent: [[Index]]
 
 ## Назначение и границы
 
-Датапак в `datapack/` показывает игроку локализованный title при первом обнаружении каждого ванильного биома Minecraft Java Edition 26.3. Проверка идёт каждый серверный тик в позиции ног игрока; охвачены все 67 биомов, включая биомы Нижнего мира, Края и `the_void`. История начинается при установке: посещения до неё не импортируются. Сторонние биомы, звуки, subtitle, ресурс-пак, мод и API сброса не входят в контракт.
+Датапак в `datapack/` и ресурс-пак в `resourcepack/` показывают игроку локализованное крупное название при первом обнаружении каждого ванильного биома Minecraft Java Edition 26.3. Проверка идёт каждый серверный тик в позиции ног игрока; охвачены все 67 биомов, включая биомы Нижнего мира, Края и `the_void`. История начинается при установке: посещения до неё не импортируются. Сторонние биомы, звуки, мод и API сброса не входят в контракт.
 
 ## Стек и версия
 
@@ -12,7 +12,9 @@ Parent: [[Index]]
 |------------|------|----------|
 | Minecraft Java Edition 26.3 | Среда исполнения | Официальный `client.jar`, `version.json` |
 | Data pack format 121 | Формат `datapack/pack.mcmeta` | `version.json`: `data_major: 121`, `data_minor: 0` |
+| Resource pack format 97.1 | Формат `resourcepack/pack.mcmeta` | `version.json`: `resource_major: 97`, `resource_minor: 1` |
 | Minecraft functions, tags, advancements, storage | Выполнение и сохранение состояния | `datapack/data/` |
+| Minecraft fonts and bitmap providers | Заголовок и крупное название биома | `resourcepack/assets/biomevisible/font/` |
 | Python 3, стандартная библиотека | Статическая проверка | `tools/check_datapack.py` |
 
 В `pack.mcmeta` установлены `min_format` и `max_format` равные 121. Java 26.3 использует Java 25.
@@ -26,13 +28,17 @@ datapack/data/minecraft/tags/function/load.json
 datapack/data/minecraft/tags/function/tick.json
 datapack/data/biomevisible/function/load.mcfunction
 datapack/data/biomevisible/function/tick.mcfunction
-datapack/data/biomevisible/function/player/*.mcfunction
+datapack/data/biomevisible/function/player/*.mcfunction # включая reward_experience
 datapack/data/biomevisible/advancement/biome/<biome>.json
+resourcepack/pack.mcmeta
+resourcepack/assets/biomevisible/font/biome_large.json
+resourcepack/assets/biomevisible/font/header.json
+resourcepack/assets/biomevisible/textures/font/pin.png
 tools/check_datapack.py
 README.md
 ```
 
-Папка `datapack/` — корень датапака. Для установки её содержимое копируют в папку мира как `datapacks/biomevisible/`.
+Папки `datapack/` и `resourcepack/` — корни соответствующих пакетов. Содержимое `datapack/` копируют в папку мира как `datapacks/biomevisible/`; `resourcepack/` устанавливают в клиентскую папку `resourcepacks/` и включают в настройках клиента.
 
 ## Поток выполнения
 
@@ -46,19 +52,22 @@ README.md
 
 Quoted NBT path сохраняет знаки отрицательных UUID int без преобразования в имя игрока. `biomevisible:macro` — общий scratch только для последовательно обрабатываемого онлайн-игрока; UUID, id текущего биома и ключ title перезаписываются при следующем вызове.
 
-`player/detect` проверяет все 67 `minecraft:<biome>` через `execute if biome ~ ~ ~`. Уже открытые биомы определяются по персональному advancement `biomevisible:biome/<biome>`. Каждый маркер содержит только критерий `minecraft:impossible`, без display и rewards. При новом биоме `player/discover` сначала обеспечивает очередь `[]`, добавляет compound `{key:"biome.minecraft.<biome>"}` и только при успешном append выдаёт marker advancement. Ключ использует ванильную локализацию клиента.
+`player/detect` проверяет все 67 `minecraft:<biome>` через `execute if biome ~ ~ ~`. Уже открытые биомы определяются по персональному advancement `biomevisible:biome/<biome>`. Каждый маркер содержит только критерий `minecraft:impossible`, без display и rewards. При новом биоме `player/discover` сначала обеспечивает очередь `[]`, добавляет compound `{key:"biome.minecraft.<biome>"}` и только при успешном append выдаёт marker advancement. Опыт выдаётся только после успешного append и успешной выдачи маркера: `player/reward_experience` добавляет ровно 5 points. Будущее изменение множителя обозначено комментарием в этой отдельной функции; сейчас множитель не применяется. Повторные открытия, отправка очереди и `/reload` награду не вызывают. Ключ использует ванильную локализацию клиента.
 
-Каждый онлайн-тик уменьшает cooldown, если он положительный. При нуле и непустой очереди `player/dispatch` задаёт title timing `20/60/20`, получает переводной ключ головы очереди и вызывает `player/send_title`. Эта функция возвращает результат команды `title`. Только при успехе очередь извлекает голову и cooldown становится равным 100; так между отправками проходит 100 онлайн-тиков. Обрабатывается не более одного элемента за тик. Offline-игрок не попадает в `@a`, поэтому его очередь и таймер ждут следующего входа.
+Каждый онлайн-тик уменьшает cooldown, если он положительный. При нуле и непустой очереди `player/dispatch` задаёт title timing `20/60/20`, получает переводной ключ головы очереди и вызывает `player/send_title`. Функция сначала отправляет локализованное название в subtitle со шрифтом `biomevisible:biome_large`, затем запускает отображение точной белой строки `открыт новый биом 📍` через title. Очередь удаляет элемент и ставит cooldown только при успехе обеих команд. Так между отправками проходит 100 онлайн-тиков. Обрабатывается не более одного элемента за тик. Offline-игрок не попадает в `@a`, поэтому его очередь и таймер ждут следующего входа.
+
+`resourcepack/assets/biomevisible/font/biome_large.json` ставит space provider с advance 24 перед bitmap providers для ванильных `ascii.png`, `nonlatin_european.png` и `accented.png`. Символьные таблицы копируются из клиентского `assets/minecraft/font/include/default.json`; bitmap height увеличен в 6 раз, ascent вычисляется как `vanilla ascent × 6 − 52`. В сочетании с масштабом subtitle 2 это даёт буквы примерно втрое крупнее прежнего title; локализованное название не переносится и может выходить за края экрана. `header.json` подменяет только символ U+1F4CD своим bitmap 8×8 и затем ссылается на `minecraft:default`, не меняя глобальный ванильный шрифт.
 
 ## Сохранение и ограничения
 
 - Discovery history — advancement-профиль игрока; очередь и cooldown — server storage с ключом из четырёх UUID int. Они не зависят от имени игрока.
 - История, очередь и cooldown сохраняются между смертью, выходом, `/reload` и перезапуском мира. Уже отправленный title не возвращается в очередь.
 - Первый обнаруженный биом не пропускается. Для игрока без записи очередь и cooldown создаются при первом тике.
-- В title применяется `color:"white"`, translation key из `biome.minecraft.<id>` и стандартное центрированное отображение title Minecraft.
+- Header использует стандартный title-размер и белый текст; название биома клиент переводит из ключа `biome.minecraft.<id>` на языке клиента.
+- Для корректного отображения сообщения клиент должен включить BiomeVisible resource pack; шрифты проверены на все 67 ванильных en_us и ru_ru названий.
 - Minecraft использует общий title-слот: другой источник title может заменить сообщение BiomeVisible.
-- Нет поддержки сторонних биомов, звуков, subtitle, ресурспака, мода или пользовательского сброса истории.
+- Нет поддержки сторонних биомов, звуков, мода или пользовательского сброса истории.
 
 ## Проверка
 
-`python3 tools/check_datapack.py <official-client-26.3.jar>` проверяет JSON, ссылки на функции и маркеры, соответствие всем 67 биомам из jar, наличие их `en_us` ключей и формат 121. Языковое отображение, макросы в запущенном сервере и multiplayer-поведение проверяются отдельным runtime-прогоном с игрой.
+`python3 tools/check_datapack.py <official-client-26.3.jar> --ru-lang <official-ru_ru.json>` проверяет JSON, ссылки на функции и маркеры, соответствие всем 67 биомам из jar, выдачу опыта, обе команды сообщения, форматы 121 и 97.1, а также покрытие en_us/ru_ru названий шрифтами. Без `--ru-lang` скрипт явно сообщает о пропуске русской проверки. Языковое отображение, макросы в запущенном сервере и multiplayer-поведение проверяются отдельным runtime-прогоном с игрой.

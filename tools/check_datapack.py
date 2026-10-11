@@ -182,10 +182,14 @@ for language_index, language in enumerate(("en_us", "ru_ru")):
     require(struct.unpack(">II", png[16:24]) == (1064, 1156), "Atlas dimensions must match title geometry")
 shader = (resource_root / "assets/minecraft/shaders/core/text.vsh").read_text()
 require("#ifdef IS_GUI" in shader and "biomeTitle || biomeShadow" in shader, "Title positioning must only target marked GUI text")
-require("ScreenSize.x * 0.9 / 266.0" in shader and "ScreenSize.y * 0.4 / 68.0" in shader, "Title must fit within the window")
+require("ScreenSize.x * 0.7 / 266.0" in shader and "ScreenSize.y * 0.3 / 68.0" in shader, "Title must fit within the window")
 require("vec2(0.0, 40.0)" in shader and "12.0 / guiPerFramebufferPixel.y" in shader, "Title must anchor 12 GUI pixels below the top")
 
-require("floor(min(4.0 / guiPerFramebufferPixel.x" in shader and "round(pixelPosition)" in shader, "Title texels and origins must align with framebuffer pixels")
+require("floor(min(2.0 / guiPerFramebufferPixel.x" in shader and "round(pixelPosition)" in shader, "Title texels and origins must align with framebuffer pixels")
+with zipfile.ZipFile(args.client_jar) as client:
+    require((resource_root / "assets/minecraft/shaders/core/text.fsh").read_bytes()
+            == client.read("assets/minecraft/shaders/core/text.fsh"),
+            "The paired fragment shader must match the official client")
 
 send_title = (pack_root / "data/biomevisible/function/player/send_title.mcfunction").read_text(encoding="utf-8")
 send_lines = send_title.splitlines()

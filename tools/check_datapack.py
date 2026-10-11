@@ -43,9 +43,6 @@ with zipfile.ZipFile(args.client_jar) as client:
         biome for biome in biomes if f"biome.minecraft.{biome}" not in translations
     ]
     require(not missing_translations, f"Missing vanilla translations: {missing_translations}")
-    vanilla_font_providers = json.loads(
-        client.read("assets/minecraft/font/include/default.json")
-    )["providers"]
 
 repo = Path(__file__).resolve().parents[1]
 pack_root = repo / "datapack"
@@ -62,6 +59,7 @@ require(
 )
 
 if args.ru_lang is None:
+    print("NOTE: Russian source translations were not checked; pass --ru-lang <ru_ru.json>.")
     ru_translations = None
 else:
     ru_translations = json.loads(args.ru_lang.read_text(encoding="utf-8"))
@@ -160,75 +158,31 @@ for biome in biomes:
     require("display" not in marker and "rewards" not in marker, f"Marker must have no display or rewards: {biome}")
 
 require(len(advancements) == len(biomes), "Unexpected extra advancement marker")
-large_font_path = resource_root / "assets/biomevisible/font/biome_large.json"
-header_font_path = resource_root / "assets/biomevisible/font/header.json"
-large_font = resource_documents.get(large_font_path, {}).get("providers", [])
-require(large_font and large_font[0] == {"type": "space", "advances": {" ": 15}}, "Large font must give spaces advance 15 before bitmap providers")
-vanilla_bitmap_providers = {
-    provider["file"]: provider
-    for provider in vanilla_font_providers
-    if provider.get("file") in {
-        "minecraft:font/ascii.png",
-        "minecraft:font/nonlatin_european.png",
-        "minecraft:font/accented.png",
-    }
-}
-large_bitmap_providers = [provider for provider in large_font if provider.get("type") == "bitmap"]
-require(
-    {provider.get("file") for provider in large_bitmap_providers} == set(vanilla_bitmap_providers)
-    and len(large_bitmap_providers) == len(vanilla_bitmap_providers),
-    "Large font must define the vanilla ascii, nonlatin_european and accented bitmaps exactly once",
-)
-large_font_chars = set(" ")
-for provider in large_bitmap_providers:
-    source = vanilla_bitmap_providers[provider["file"]]
-    vanilla_height = source.get("height", 8)
-    require(
-        provider.get("chars") == source["chars"]
-        and provider.get("height") == vanilla_height * 15 // 4
-        and provider.get("ascent") == round(source["ascent"] * 15 / 4) - 25,
-        f"Large font must copy and scale vanilla provider {provider['file']}",
-    )
-    large_font_chars.update(char for row in provider["chars"] for char in row if char != "\0")
-accented_chars = {
-    char
-    for provider in large_bitmap_providers
-    if provider["file"] == "minecraft:font/accented.png"
-    for row in provider["chars"]
-    for char in row
-    if char != "\0"
-}
-require(set("йё") <= accented_chars, "Accented font provider must retain Russian й and ё")
-
-header_providers = resource_documents.get(header_font_path, {}).get("providers", [])
-require(
-    len(header_providers) == 2
-    and header_providers[0].get("type") == "bitmap"
-    and header_providers[0].get("file") == "biomevisible:font/pin.png"
-    and header_providers[0].get("chars") == ["📍"]
-    and header_providers[0].get("height") == 8
-    and header_providers[0].get("ascent") == 7
-    and header_providers[1] == {"type": "reference", "id": "minecraft:default"},
-    "Header font must put the native-size pin before the vanilla default font",
-)
-pin_path = resource_root / "assets/biomevisible/textures/font/pin.png"
-pin_png = pin_path.read_bytes()
-require(pin_png[:8] == b"\x89PNG\r\n\x1a\n", "Header pin must be a PNG")
-require(struct.unpack(">II", pin_png[16:24]) == (8, 8), "Header pin PNG must be 8×8 pixels")
-
-if ru_translations is None:
-    print("NOTE: Russian translation coverage was not checked; pass --ru-lang <ru_ru.json> for the full check.")
-else:
-    language_texts = [
-        translations[f"biome.minecraft.{biome}"]
-        for biome in biomes
-    ] + [
-        ru_translations[f"biome.minecraft.{biome}"]
-        for biome in biomes
-    ]
-    required_font_chars = set("".join(language_texts))
-    missing_font_chars = sorted(required_font_chars - large_font_chars)
-    require(not missing_font_chars, f"Large font misses localized biome characters: {missing_font_chars}")
+title_font_path = resource_root / "assets/biomevisible/font/title.json"
+providers = resource_documents.get(title_font_path, {}).get("providers", [])
+require(len(providers) == 2, "Title font must contain English and Russian atlases")
+for language_index, language in enumerate(("en_us", "ru_ru")):
+    provider = providers[language_index]
+    require(provider.get("type") == "bitmap", "Title provider must use bitmap glyphs")
+    require(provider.get("file") == f"biomevisible:font/titles_{language}.png", "Wrong title atlas")
+    require(provider.get("ascent") == 7 and provider.get("height") == 56, "Title geometry must match the shader")
+    rows = provider.get("chars", [])
+    require(len(rows) == 9 and all(len(row) == 8 for row in rows), "Atlas must contain 8 x 9 cells")
+    glyphs = "".join(rows).replace("\0", "")
+    expected = "".join(chr(0xE000 + language_index * len(biomes) + i) for i in range(len(biomes)))
+    require(glyphs == expected, "Title glyphs must cover each biome exactly once")
+    lang = resource_documents[resource_root / f"assets/biomevisible/lang/{language}.json"]
+    title_keys = {key for key in lang if key.startswith("biomevisible.title.")}
+    require(title_keys == {f"biomevisible.title.biome.minecraft.{biome}" for biome in biomes}, "Title translations must cover all biomes")
+    for i, biome in enumerate(biomes):
+        require(lang[f"biomevisible.title.biome.minecraft.{biome}"] == expected[i], f"Wrong {language} glyph for {biome}")
+    png = (resource_root / f"assets/biomevisible/textures/font/titles_{language}.png").read_bytes()
+    require(png[:8] == b"\x89PNG\r\n\x1a\n", "Title atlas must be PNG")
+    require(struct.unpack(">II", png[16:24]) == (1600, 504), "Atlas dimensions must match title geometry")
+shader = (resource_root / "assets/minecraft/shaders/core/text.vsh").read_text()
+require("#ifdef IS_GUI" in shader and "biomeTitle || biomeShadow" in shader, "Title positioning must only target marked GUI text")
+require("screen.x * 0.9 / 800.0" in shader and "screen.y * 0.4 / 224.0" in shader, "Title must fit within the window")
+require("position.y - center.y + 40.0" in shader and "* scale + 12.0" in shader, "Title must anchor 12 GUI pixels below the top")
 
 send_title = (pack_root / "data/biomevisible/function/player/send_title.mcfunction").read_text(encoding="utf-8")
 send_lines = send_title.splitlines()
@@ -243,17 +197,13 @@ require(
 require("return run title @s title " in send_lines[header_index], "Title function must return header command success")
 subtitle_component = json.loads(send_lines[subtitle_index].split("title @s subtitle ", 1)[1])
 header_component = json.loads(send_lines[header_index].split("title @s title ", 1)[1])
+require(subtitle_component == {"text": ""}, "Subtitle must clear any preceding subtitle")
 require(
-    subtitle_component.get("translate") == "$(title_key)"
-    and subtitle_component.get("font") == "biomevisible:biome_large"
-    and subtitle_component.get("color") == "white",
-    "Subtitle must use the queued client-side translation in the large white font",
-)
-require(
-    header_component.get("text") == "открыт новый биом 📍"
-    and header_component.get("font") == "biomevisible:header"
-    and header_component.get("color") == "white",
-    "Header must use the exact white text and dedicated pin font",
+    header_component.get("translate") == "biomevisible.title.$(title_key)"
+    and header_component.get("font") == "biomevisible:title"
+    and header_component.get("color") == "#fffffe"
+    and header_component.get("shadow_color") == -12632258,
+    "Title must use the localized wrapped glyph and dedicated shader colors",
 )
 dispatch = (pack_root / "data/biomevisible/function/player/dispatch.mcfunction").read_text(encoding="utf-8")
 require("title @s times 20 60 20" in dispatch, "Title timing must be 20/60/20 ticks")

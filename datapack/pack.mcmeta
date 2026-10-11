@@ -4,11 +4,11 @@
       "translate": "biomevisible.pack.datapack.description",
       "fallback": "BiomeVisible v%s: Shows biome names on first discovery.",
       "with": [
-        "1.0.0"
+        "1.0.1"
       ]
     },
     "min_format": 121,
     "max_format": 121
   },
-  "version": "1.0.0"
+  "version": "1.0.1"
 }

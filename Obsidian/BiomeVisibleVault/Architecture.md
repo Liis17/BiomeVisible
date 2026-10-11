@@ -21,6 +21,7 @@ Parent: [[Index]]
 
 ```text
 datapack/pack.mcmeta
+datapack/pack.png                         # иконка датапака
 datapack/data/minecraft/tags/function/load.json
 datapack/data/minecraft/tags/function/tick.json
 datapack/data/biomevisible/function/load.mcfunction

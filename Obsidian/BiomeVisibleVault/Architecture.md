@@ -35,7 +35,6 @@ resourcepack/assets/biomevisible/font/biome_large.json
 resourcepack/assets/biomevisible/font/header.json
 resourcepack/assets/biomevisible/textures/font/pin.png
 tools/check_datapack.py
-README.md
 ```
 
 Папки `datapack/` и `resourcepack/` — корни соответствующих пакетов. Содержимое `datapack/` копируют в папку мира как `datapacks/biomevisible/`; `resourcepack/` устанавливают в клиентскую папку `resourcepacks/` и включают в настройках клиента.

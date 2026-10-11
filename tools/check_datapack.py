@@ -69,12 +69,16 @@ for tag_name, function_name in (("load", "biomevisible:load"), ("tick", "biomevi
 function_ref = re.compile(r"\bfunction\s+([a-z0-9_.-]+:[a-z0-9_./-]+)")
 advancement_ref = re.compile(r"\badvancement grant @s only ([a-z0-9_.-]+:[a-z0-9_./-]+)")
 for path in functions.values():
-    content = path.read_text(encoding="utf-8").replace("$(biome)", "badlands")
+    content = path.read_text(encoding="utf-8")
     for line_number, line in enumerate(content.splitlines(), start=1):
-        require("$(" not in line or line.startswith("$"), f"Macro command needs '$': {path.relative_to(repo)}:{line_number}")
-    for reference in function_ref.findall(content):
+        location = f"{path.relative_to(repo)}:{line_number}"
+        has_macro_variable = re.search(r"\$\([^()]+\)", line) is not None
+        require(not line.startswith("$") or has_macro_variable, f"Macro prefix needs a variable: {location}")
+        require("$(" not in line or line.startswith("$"), f"Macro variable needs '$' prefix: {location}")
+    resolved_content = content.replace("$(biome)", "badlands")
+    for reference in function_ref.findall(resolved_content):
         require(reference in functions, f"{path.relative_to(repo)} references missing function {reference}")
-    for reference in advancement_ref.findall(content):
+    for reference in advancement_ref.findall(resolved_content):
         require(reference in advancements, f"{path.relative_to(repo)} references missing advancement {reference}")
 
 detect = (pack_root / "data/biomevisible/function/player/detect.mcfunction").read_text(encoding="utf-8")

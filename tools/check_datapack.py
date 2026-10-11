@@ -163,7 +163,7 @@ require(len(advancements) == len(biomes), "Unexpected extra advancement marker")
 large_font_path = resource_root / "assets/biomevisible/font/biome_large.json"
 header_font_path = resource_root / "assets/biomevisible/font/header.json"
 large_font = resource_documents.get(large_font_path, {}).get("providers", [])
-require(large_font and large_font[0] == {"type": "space", "advances": {" ": 24}}, "Large font must give spaces advance 24 before bitmap providers")
+require(large_font and large_font[0] == {"type": "space", "advances": {" ": 15}}, "Large font must give spaces advance 15 before bitmap providers")
 vanilla_bitmap_providers = {
     provider["file"]: provider
     for provider in vanilla_font_providers
@@ -185,8 +185,8 @@ for provider in large_bitmap_providers:
     vanilla_height = source.get("height", 8)
     require(
         provider.get("chars") == source["chars"]
-        and provider.get("height") == vanilla_height * 6
-        and provider.get("ascent") == source["ascent"] * 6 - 52,
+        and provider.get("height") == vanilla_height * 15 // 4
+        and provider.get("ascent") == round(source["ascent"] * 15 / 4) - 25,
         f"Large font must copy and scale vanilla provider {provider['file']}",
     )
     large_font_chars.update(char for row in provider["chars"] for char in row if char != "\0")

@@ -35,7 +35,6 @@ resourcepack/assets/biomevisible/font/biome_large.json
 resourcepack/assets/biomevisible/font/header.json
 resourcepack/assets/biomevisible/textures/font/pin.png
 tools/check_datapack.py
-README.md
 ```
 
 Папки `datapack/` и `resourcepack/` — корни соответствующих пакетов. Содержимое `datapack/` копируют в папку мира как `datapacks/biomevisible/`; `resourcepack/` устанавливают в клиентскую папку `resourcepacks/` и включают в настройках клиента.
@@ -56,7 +55,7 @@ Quoted NBT path сохраняет знаки отрицательных UUID in
 
 Каждый онлайн-тик уменьшает cooldown, если он положительный. При нуле и непустой очереди `player/dispatch` задаёт title timing `20/60/20`, получает переводной ключ головы очереди и вызывает `player/send_title`. Функция сначала отправляет локализованное название в subtitle со шрифтом `biomevisible:biome_large`, затем запускает отображение точной белой строки `открыт новый биом 📍` через title. Очередь удаляет элемент и ставит cooldown только при успехе обеих команд. Так между отправками проходит 100 онлайн-тиков. Обрабатывается не более одного элемента за тик. Offline-игрок не попадает в `@a`, поэтому его очередь и таймер ждут следующего входа.
 
-`resourcepack/assets/biomevisible/font/biome_large.json` ставит space provider с advance 24 перед bitmap providers для ванильных `ascii.png`, `nonlatin_european.png` и `accented.png`. Символьные таблицы копируются из клиентского `assets/minecraft/font/include/default.json`; bitmap height увеличен в 6 раз, ascent вычисляется как `vanilla ascent × 6 − 52`. В сочетании с масштабом subtitle 2 это даёт буквы примерно втрое крупнее прежнего title; локализованное название не переносится и может выходить за края экрана. `header.json` подменяет только символ U+1F4CD своим bitmap 8×8 и затем ссылается на `minecraft:default`, не меняя глобальный ванильный шрифт.
+`resourcepack/assets/biomevisible/font/biome_large.json` ставит space provider с advance 15 перед bitmap providers для ванильных `ascii.png`, `nonlatin_european.png` и `accented.png`. Символьные таблицы копируются из клиентского `assets/minecraft/font/include/default.json`; bitmap height равен `vanilla height × 15/4`, ascent — `round(vanilla ascent × 15/4) − 25`. При масштабе subtitle 2 это даёт буквы примерно в 1,875 раза крупнее прежнего title и поднимает название ближе к заголовку; локализованное название не переносится и может выходить за края экрана. `header.json` подменяет только символ U+1F4CD своим bitmap 8×8 и затем ссылается на `minecraft:default`, не меняя глобальный ванильный шрифт.
 
 ## Сохранение и ограничения
 

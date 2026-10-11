@@ -1,6 +1,12 @@
 {
   "pack": {
-    "description": "BiomeVisible: крупные локализованные названия биомов",
+    "description": {
+      "translate": "biomevisible.pack.resourcepack.description",
+      "fallback": "BiomeVisible v%s: Large localized biome names for BiomeVisible.",
+      "with": [
+        "1.0.0"
+      ]
+    },
     "min_format": [
       97,
       1
@@ -9,5 +15,6 @@
       97,
       1
     ]
-  }
+  },
+  "version": "1.0.0"
 }

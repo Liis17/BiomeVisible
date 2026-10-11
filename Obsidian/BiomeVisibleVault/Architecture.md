@@ -31,6 +31,8 @@ datapack/data/biomevisible/function/tick.mcfunction
 datapack/data/biomevisible/function/player/*.mcfunction # включая reward_experience
 datapack/data/biomevisible/advancement/biome/<biome>.json
 resourcepack/pack.mcmeta
+resourcepack/pack.png                      # та же иконка, что у датапака
+resourcepack/assets/biomevisible/lang/{en_us,ru_ru}.json # описания обоих паков
 resourcepack/assets/biomevisible/font/biome_large.json
 resourcepack/assets/biomevisible/font/header.json
 resourcepack/assets/biomevisible/textures/font/pin.png
@@ -70,3 +72,9 @@ Quoted NBT path сохраняет знаки отрицательных UUID in
 ## Проверка
 
 `python3 tools/check_datapack.py <official-client-26.3.jar> --ru-lang <official-ru_ru.json>` проверяет JSON, ссылки на функции и маркеры, соответствие всем 67 биомам из jar, выдачу опыта, обе команды сообщения, форматы 121 и 97.1, а также покрытие en_us/ru_ru названий шрифтами. Без `--ru-lang` скрипт явно сообщает о пропуске русской проверки. Языковое отображение, макросы в запущенном сервере и multiplayer-поведение проверяются отдельным runtime-прогоном с игрой.
+
+## Метаданные пакетов
+
+Оба `pack.mcmeta` содержат одинаковую версию проекта `MAJOR.MINOR.PATCH` в верхнеуровневом поле `version`; это метаданные проекта для сборки, не формат совместимости Minecraft. Версия также передаётся в `pack.description.with`. При изменении любого пакета повышаются обе версии согласно `AGENTS.md`.
+
+`pack.description` — переводной текстовый компонент с английским `fallback`. Ключи обоих описаний определены в `resourcepack/assets/biomevisible/lang/en_us.json` и `ru_ru.json`; русский перевод доступен при загрузке ресурс-пака. Без перевода отображается английское описание. Оба пака используют одинаковый `pack.png`.

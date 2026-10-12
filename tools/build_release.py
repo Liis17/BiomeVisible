@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate shared versions and package changed packs since a published release."""
+"""Validate shared versions and build all three archives when release inputs change."""
 
 import argparse
 import json
@@ -8,8 +8,11 @@ import subprocess
 import zipfile
 from pathlib import Path
 
+from build_recolourful_compat import build as build_compat
+
 
 PACKS = ("datapack", "resourcepack")
+RELEASE_INPUTS = (*PACKS, "tools/build_recolourful_compat.py")
 
 
 def git(*args):
@@ -36,22 +39,19 @@ def build(previous_tag, output_dir):
     if previous_tag:
         # Reject old queued runs or rewritten release history instead of releasing backwards.
         subprocess.run(["git", "merge-base", "--is-ancestor", previous_tag, "HEAD"], check=True)
-        paths = git("diff", "--name-only", "-z", previous_tag, "HEAD", "--", *PACKS).decode().split("\0")
-        changed = [pack for pack in PACKS if any(path.startswith(pack + "/") for path in paths)]
-    else:
-        changed = list(PACKS)
-    if not changed:
-        return {"release": "false"}
+        paths = git("diff", "--name-only", "-z", previous_tag, "HEAD", "--", *RELEASE_INPUTS).decode().split("\0")
+        if not any(paths):
+            return {"release": "false"}
 
     if previous_tag:
         for pack in PACKS:
             previous = json.loads(git("show", f"{previous_tag}:{pack}/pack.mcmeta"))
             if versions[pack] <= version(previous):
-                raise SystemExit("Changes to either pack require a higher version in both packs")
+                raise SystemExit("Changes to packs or the compatibility builder require a higher version in both packs")
 
     output_dir.mkdir(parents=True, exist_ok=True)
     archives = []
-    for pack in changed:
+    for pack in PACKS:
         archive = output_dir / f"BiomeVisible-{pack}-{current_version}.zip"
         # Only tracked files belong in a release; omit local files such as .DS_Store.
         paths = git("ls-files", "-z", "--", pack).decode().split("\0")
@@ -61,10 +61,17 @@ def build(previous_tag, output_dir):
                 bundle.write(path, path.relative_to(pack).as_posix())
         archives.append(archive.name)
 
+    compatibility = output_dir / f"BiomeVisible-resourcepack-{current_version}-Recolourful.zip"
+    build_compat(compatibility, root=Path.cwd())
+    archives.append(compatibility.name)
+
     commit_range = f"{previous_tag}..HEAD" if previous_tag else "HEAD"
     commits = git("log", "--reverse", "--format=- %h %s", commit_range).decode().rstrip()
     notes = f"BiomeVisible v{current_version}\n\n## Downloads\n\n"
     notes += "\n".join(f"- `{name}`" for name in archives)
+    notes += ("\n\nUse the datapack with ONE resource pack. The regular resource pack works independently. "
+              "The Recolourful variant requires Recolourful Containers DARK 3.1.4 for Minecraft 26.3: "
+              "enable it above the original Recolourful pack and keep that pack enabled.\n")
     notes += "\n\n## Commits since " + (f"`{previous_tag}`" if previous_tag else "the start of the project")
     notes += f"\n\n{commits}\n"
     (output_dir / "release-notes.md").write_text(notes, encoding="utf-8")

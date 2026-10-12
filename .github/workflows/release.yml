@@ -7,6 +7,8 @@ on:
       - 'datapack/**'
       - 'resourcepack/**'
       - 'tools/build_release.py'
+      - 'tools/build_recolourful_compat.py'
+      - 'tools/test_build_release.py'
       - '.github/workflows/release.yml'
   workflow_dispatch:
 
@@ -35,7 +37,10 @@ jobs:
           tag=$(gh release list --exclude-drafts --exclude-pre-releases --limit 1 --json tagName --jq '.[0].tagName // ""')
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
 
-      - name: Validate versions and build changed packs
+      - name: Test release packaging
+        run: python3 tools/test_build_release.py
+
+      - name: Validate versions and build three archives
         id: build
         env:
           PREVIOUS_TAG: ${{ steps.previous.outputs.tag }}

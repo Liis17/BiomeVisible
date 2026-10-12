@@ -23,6 +23,13 @@ class ReleaseTests(unittest.TestCase):
         for pack in ("datapack", "resourcepack"):
             (self.root / pack).mkdir()
             (self.root / pack / "pack.png").write_bytes(b"icon")
+        for stage in ('vsh', 'fsh'):
+            name = f'assets/minecraft/shaders/core/text.{stage}'
+            path = self.root / 'resourcepack' / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes((SCRIPT.parent.parent / 'resourcepack' / name).read_bytes())
+        (self.root / 'tools').mkdir()
+        (self.root / 'tools/build_recolourful_compat.py').write_text('# Compatibility builder fixture\n')
         self.write_versions("1.0.0")
         self.commit("Initial packs")
 
@@ -52,9 +59,26 @@ class ReleaseTests(unittest.TestCase):
         self.assertIn("tag=v1.0.0", result.stdout)
         for pack in ("datapack", "resourcepack"):
             with zipfile.ZipFile(self.root / "dist" / f"BiomeVisible-{pack}-1.0.0.zip") as archive:
-                self.assertEqual(set(archive.namelist()), {"pack.mcmeta", "pack.png"})
+                expected = {"pack.mcmeta", "pack.png"}
+                if pack == 'resourcepack':
+                    expected.update(f'assets/minecraft/shaders/core/text.{stage}' for stage in ('vsh', 'fsh'))
+                self.assertEqual(set(archive.namelist()), expected)
                 self.assertEqual(json.loads(archive.read("pack.mcmeta"))["version"], "1.0.0")
-        self.assertIn("Initial packs", (self.root / "dist" / "release-notes.md").read_text())
+        self.assertEqual(len(list((self.root / 'dist').glob('*.zip'))), 3)
+        compatibility = 'BiomeVisible-resourcepack-1.0.0-Recolourful.zip'
+        with zipfile.ZipFile(self.root / 'dist' / compatibility) as archive:
+            self.assertEqual(set(archive.namelist()), {'pack.mcmeta', 'pack.png', 'assets/minecraft/shaders/core/text.vsh'})
+            self.assertEqual(archive.read('pack.png'), b'icon')
+            meta = json.loads(archive.read('pack.mcmeta'))
+            self.assertEqual(meta['version'], '1.0.0')
+            self.assertIn('requires Recolourful DARK 3.1.4', meta['pack']['description'])
+            shader = archive.read('assets/minecraft/shaders/core/text.vsh').decode()
+            self.assertIn('#include <minecraft:interfaces.glsl>', shader)
+            self.assertIn('recolourful = rendertype_text(', shader)
+        notes = (self.root / 'dist' / 'release-notes.md').read_text()
+        self.assertIn('Initial packs', notes)
+        self.assertIn(compatibility, notes)
+        self.assertIn('ONE resource pack', notes)
 
     def test_unchanged_and_unrelated_changes_skip_release(self):
         self.git("tag", "v1.0.0")
@@ -81,13 +105,23 @@ class ReleaseTests(unittest.TestCase):
         self.write_versions("1.0.1")
         self.commit("Update resource pack and shared version")
         self.assertIn("tag=v1.0.1", self.build("v1.0.0").stdout)
-        self.assertEqual(len(list((self.root / "dist").glob("*.zip"))), 2)
+        self.assertEqual(len(list((self.root / "dist").glob("*.zip"))), 3)
         notes = (self.root / "dist" / "release-notes.md").read_text()
         self.assertIn("Update notes", notes)
         self.assertIn("Update resource pack", notes)
         self.assertNotIn("Initial packs", notes)
         self.git("tag", "v1.0.1")
         self.assertEqual(self.build("v1.0.1").stdout.strip(), "release=false")
+
+    def test_compatibility_builder_change_requires_bump_and_builds_three_archives(self):
+        self.git('tag', 'v1.0.0')
+        (self.root / 'tools/build_recolourful_compat.py').write_text('# Updated adapter fixture\n')
+        self.commit('Update compatibility builder')
+        self.assertIn('higher version in both packs', self.build('v1.0.0', success=False).stderr)
+        self.write_versions('1.0.1')
+        self.commit('Bump shared version')
+        self.build('v1.0.0')
+        self.assertEqual(len(list((self.root / 'dist').glob('*.zip'))), 3)
 
     def test_mismatched_invalid_or_stale_display_versions_fail(self):
         self.write_versions("1.0.1", "1.0.0")

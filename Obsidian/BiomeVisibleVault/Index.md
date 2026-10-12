@@ -14,9 +14,9 @@
 
 - `tools/build_title_assets.py` — генерация блоков из официальных en/ru названий и bitmap-шрифтов, максимум два слова названия в строке; `--check` сверяет готовые ресурсы (требуется Pillow).
 
-- `tools/build_recolourful_compat.py` — сборка локального ресурспака с шейдерами из Recolourful Containers DARK 3.1.4 для Minecraft 26.3; совместимый ZIP включают вместо обычного BiomeVisible выше оригинального Recolourful.
+- `tools/build_recolourful_compat.py` — сборка собственного адаптера для установленного Recolourful Containers DARK 3.1.4 и Minecraft 26.3 без копирования его файлов; совместимый ZIP включают вместо обычного BiomeVisible выше оригинального Recolourful.
 
-- `tools/test_title_shader.py` — проверка реальных шейдеров и геометрии уведомления на GPU при разных размерах окна и GUI Scale (требуется ModernGL и официальный client.jar); поддерживает проверку совместимого ZIP через `--resource-pack`.
+- `tools/test_title_shader.py` — проверка реальных шейдеров и геометрии уведомления на GPU при разных размерах окна и GUI Scale (требуется ModernGL и официальный client.jar); для адаптера передать `--resource-pack <compat.zip> --recolourful <DARK-3.1.4.zip>`.
 
 - `tools/test_title_assets.py` — регрессионная проверка равномерности пикселей букв и стыковки половин блока (требуется Pillow).
 

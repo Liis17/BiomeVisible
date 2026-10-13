@@ -20,7 +20,24 @@ def require(condition: bool, message: str) -> None:
 parser = argparse.ArgumentParser()
 parser.add_argument("client_jar", type=Path, help="Official Minecraft 26.3 client.jar")
 parser.add_argument("--ru-lang", type=Path, help="Official ru_ru.json downloaded from the 26.3 client assets")
+parser.add_argument(
+    "--lang-dir",
+    type=Path,
+    help="Directory holding the official <locale>.json files of every title language except en_us and ru_ru",
+)
 args = parser.parse_args()
+
+TITLE_LANGUAGES = (
+    "en_us",
+    "ru_ru",
+    "de_de",
+    "fr_fr",
+    "es_es",
+    "it_it",
+    "pl_pl",
+    "nl_nl",
+    "pt_br",
+)
 
 with zipfile.ZipFile(args.client_jar) as client:
     version = json.loads(client.read("version.json"))
@@ -67,6 +84,21 @@ else:
         biome for biome in biomes if f"biome.minecraft.{biome}" not in ru_translations
     ]
     require(not missing_ru_translations, f"Missing Russian biome translations: {missing_ru_translations}")
+
+checked_languages = ["en_us"] + (["ru_ru"] if ru_translations is not None else [])
+if args.lang_dir is None:
+    print(
+        "NOTE: Extra language source translations were not checked; "
+        "pass --lang-dir <directory> with the official <locale>.json files."
+    )
+else:
+    for language in TITLE_LANGUAGES[2:]:
+        path = args.lang_dir / f"{language}.json"
+        require(path.exists(), f"Missing official translations: {path}")
+        source = json.loads(path.read_text(encoding="utf-8"))
+        missing = [biome for biome in biomes if f"biome.minecraft.{biome}" not in source]
+        require(not missing, f"Missing {language} biome translations: {missing}")
+        checked_languages.append(language)
 
 json_files = sorted(pack_root.rglob("*.json"))
 documents = {}
@@ -210,9 +242,9 @@ for biome in biomes:
 require(len(advancements) == len(biomes), "Unexpected extra advancement marker")
 title_font_path = resource_root / "assets/biomevisible/font/title.json"
 providers = resource_documents.get(title_font_path, {}).get("providers", [])
-require(len(providers) == 3, "Title font must contain spacing and English/Russian atlases")
+require(len(providers) == len(TITLE_LANGUAGES) + 1, "Title font must contain spacing and one atlas per language")
 require(providers[0] == {"type": "space", "advances": {"\uf000": -1}}, "Title halves must cancel the vanilla one-pixel glyph spacing")
-for language_index, language in enumerate(("en_us", "ru_ru")):
+for language_index, language in enumerate(TITLE_LANGUAGES):
     provider = providers[language_index + 1]
     require(provider.get("type") == "bitmap", "Title provider must use bitmap glyphs")
     require(provider.get("file") == f"biomevisible:font/titles_{language}.png", "Wrong title atlas")
@@ -244,24 +276,28 @@ with zipfile.ZipFile(args.client_jar) as client:
 send_title = (pack_root / "data/biomevisible/function/player/send_title.mcfunction").read_text(encoding="utf-8")
 send_lines = send_title.splitlines()
 subtitle_index = next((i for i, line in enumerate(send_lines) if "title @s subtitle " in line), -1)
-header_index = next((i for i, line in enumerate(send_lines) if "title @s title " in line), -1)
-require(subtitle_index >= 0 and header_index > subtitle_index, "Subtitle must be sent before the header title trigger")
+title_indices = [i for i, line in enumerate(send_lines) if "title @s title " in line]
+require(subtitle_index >= 0 and len(title_indices) == 3 and all(i > subtitle_index for i in title_indices),
+       "Subtitle must precede three dimension-specific title triggers")
 require(
     "store success score @s bv.ok run title @s subtitle " in send_lines[subtitle_index]
-    and any("unless score @s bv.ok matches 1 run return fail" in line for line in send_lines[subtitle_index + 1 : header_index]),
+    and any("unless score @s bv.ok matches 1 run return fail" in line for line in send_lines[subtitle_index + 1 : title_indices[0]]),
     "Title trigger must be skipped when subtitle sending fails",
 )
-require("return run title @s title " in send_lines[header_index], "Title function must return header command success")
+expected_colors = [("#ff7a5c", -12969454), ("#c4b5fd", -14804178), ("#fffffe", -12632258)]
 subtitle_component = json.loads(send_lines[subtitle_index].split("title @s subtitle ", 1)[1])
-header_component = json.loads(send_lines[header_index].split("title @s title ", 1)[1])
 require(subtitle_component == {"text": ""}, "Subtitle must clear any preceding subtitle")
-require(
-    header_component.get("translate") == "biomevisible.title.$(title_key)"
-    and header_component.get("font") == "biomevisible:title"
-    and header_component.get("color") == "#fffffe"
-    and header_component.get("shadow_color") == -12632258,
-    "Title must use the localized wrapped glyph and dedicated shader colors",
-)
+for idx, (exp_color, exp_shadow) in zip(title_indices, expected_colors):
+    require("$return run title @s title " in send_lines[idx] or "return run title @s title " in send_lines[idx],
+           "Each title trigger must return header command success")
+    component = json.loads(send_lines[idx].split("title @s title ", 1)[1])
+    require(
+        component.get("translate") == "biomevisible.title.$(title_key)"
+        and component.get("font") == "biomevisible:title"
+        and component.get("color") == exp_color
+        and component.get("shadow_color") == exp_shadow,
+        "Title must use the localized wrapped glyph and dimension-specific shader colors",
+    )
 dispatch = (pack_root / "data/biomevisible/function/player/dispatch.mcfunction").read_text(encoding="utf-8")
 require("title @s times 20 60 20" in dispatch, "Title timing must be 20/60/20 ticks")
 require("execute store success score @s bv.ok run function biomevisible:player/send_title" in dispatch, "Dispatch must capture success of both title sends")
@@ -280,5 +316,8 @@ require(
     "Player checks must run once per 10 ticks",
 )
 
-translation_status = "en_us + ru_ru" if ru_translations is not None else "en_us"
-print(f"OK: data format 121, resource format 97.1; JSON, function references, 67 biome checks, markers, fonts and {translation_status} verified from {args.client_jar}")
+print(
+    f"OK: data format 121, resource format 97.1; JSON, function references, 67 biome checks, markers, "
+    f"{len(TITLE_LANGUAGES)} title fonts and {' + '.join(checked_languages)} translations "
+    f"verified from {args.client_jar}"
+)

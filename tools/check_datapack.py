@@ -144,7 +144,7 @@ require('queue append value {key:"biome.minecraft.$(biome)"}' in discover, "Queu
 discover_lines = discover.splitlines()
 append_line = next((i for i, line in enumerate(discover_lines) if "queue append" in line), -1)
 grant_line = next((i for i, line in enumerate(discover_lines) if "advancement grant @s only biomevisible:biome/$(biome)" in line), -1)
-reward_line = next((i for i, line in enumerate(discover_lines) if "function biomevisible:player/reward_experience" in line), -1)
+reward_line = next((i for i, line in enumerate(discover_lines) if "experience add @s 5 points" in line), -1)
 require(append_line >= 0 and grant_line > append_line, "Discovery must grant its marker after enqueue")
 require("store success score @s bv.ok" in discover_lines[append_line], "Queue append success must be captured")
 require(
@@ -158,17 +158,15 @@ require(
     "Experience must be awarded only after a successful new marker grant",
 )
 
-reward_function = functions.get("biomevisible:player/reward_experience")
-require(reward_function is not None, "Missing player/reward_experience.mcfunction")
-reward_content = reward_function.read_text(encoding="utf-8")
-reward_commands = [line for line in reward_content.splitlines() if line and not line.startswith("#")]
-require(reward_commands == ["experience add @s 5 points"], "New discovery reward must be exactly 5 experience points")
+require(not (pack_root / "data/biomevisible/function/player/reward_experience.mcfunction").exists(), "Reward must live inside discover")
+experience_lines = [line for line in discover_lines if "experience add" in line]
+require(experience_lines == ["execute if score @s bv.ok matches 1 run experience add @s 5 points"], "New discovery reward must be exactly 5 experience points")
 reward_references = [
     name
     for name, path in functions.items()
-    if "function biomevisible:player/reward_experience" in path.read_text(encoding="utf-8")
+    if "experience add" in path.read_text(encoding="utf-8")
 ]
-require(reward_references == ["biomevisible:player/discover"], "Experience may only be called from new discovery")
+require(reward_references == ["biomevisible:player/discover"], "Experience may only be granted from new discovery")
 
 for biome in biomes:
     advancement_id = f"biomevisible:biome/{biome}"

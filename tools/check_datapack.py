@@ -111,12 +111,32 @@ for path in functions.values():
     for reference in advancement_ref.findall(resolved_content):
         require(reference in advancements, f"{path.relative_to(repo)} references missing advancement {reference}")
 
-detect = (pack_root / "data/biomevisible/function/player/detect.mcfunction").read_text(encoding="utf-8")
-detected = Counter(re.findall(r"execute if biome ~ ~ ~ minecraft:([a-z0-9_]+)", detect))
+detect_root = pack_root / "data/biomevisible/function/player/detect"
+detect_texts = {name: (detect_root / f"{name}.mcfunction").read_text(encoding="utf-8") for name in ("overworld", "nether", "end")}
+detect = "\n".join(detect_texts.values())
+detected = Counter(
+    re.findall(
+        r'execute if biome ~ ~ ~ minecraft:([a-z0-9_]+) unless entity @s\[advancements=\{biomevisible:biome/\1=true\}\] run data modify storage biomevisible:macro biome set value "\1"',
+        detect,
+    )
+)
 require(set(detected) == set(biomes), "Biome detection does not cover the official registry exactly")
-require(all(detected[biome] == 2 for biome in biomes), "Each biome must set its macro and enqueue once")
+require(all(detected[biome] == 1 for biome in biomes), "Each biome must be detected exactly once across dimensions")
+for name, text in detect_texts.items():
+    require("data remove storage biomevisible:macro biome" in text, f"Detect {name} must clear the stale biome first")
+    require(
+        text.rstrip().endswith("execute if data storage biomevisible:macro biome run function biomevisible:player/discover with storage biomevisible:macro"),
+        f"Detect {name} must enqueue once after all biome checks",
+    )
+online_tick = (pack_root / "data/biomevisible/function/player/online_tick.mcfunction").read_text(encoding="utf-8")
+require(
+    "execute if dimension minecraft:the_nether run function biomevisible:player/detect/nether" in online_tick
+    and "execute if dimension minecraft:the_end run function biomevisible:player/detect/end" in online_tick
+    and "execute unless dimension minecraft:the_nether unless dimension minecraft:the_end run function biomevisible:player/detect/overworld" in online_tick,
+    "Detection must dispatch by dimension",
+)
 markers = Counter(re.findall(r"advancements=\{biomevisible:biome/([a-z0-9_]+)=true\}", detect))
-require(set(markers) == set(biomes) and all(markers[biome] == 2 for biome in biomes), "Detection must use each player's hidden advancement marker")
+require(set(markers) == set(biomes) and all(markers[biome] == 1 for biome in biomes), "Detection must use each player's hidden advancement marker")
 require(".seen." not in detect, "Advancement markers are the sole discovery history")
 
 discover = (pack_root / "data/biomevisible/function/player/discover.mcfunction").read_text(encoding="utf-8")

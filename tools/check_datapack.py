@@ -143,12 +143,64 @@ for path in functions.values():
     for reference in advancement_ref.findall(resolved_content):
         require(reference in advancements, f"{path.relative_to(repo)} references missing advancement {reference}")
 
-detect = (pack_root / "data/biomevisible/function/player/detect.mcfunction").read_text(encoding="utf-8")
-detected = Counter(re.findall(r"execute if biome ~ ~ ~ minecraft:([a-z0-9_]+)", detect))
+detect_root = pack_root / "data/biomevisible/function/player/detect"
+detect_texts = {name: (detect_root / f"{name}.mcfunction").read_text(encoding="utf-8") for name in ("overworld", "nether", "end")}
+detect = "\n".join(detect_texts.values())
+detected = Counter(
+    re.findall(
+        r'execute if biome ~ ~ ~ minecraft:([a-z0-9_]+) unless entity @s\[advancements=\{biomevisible:biome/\1=true\}\] run data modify storage biomevisible:macro biome set value "\1"',
+        detect,
+    )
+)
 require(set(detected) == set(biomes), "Biome detection does not cover the official registry exactly")
-require(all(detected[biome] == 2 for biome in biomes), "Each biome must set its macro and enqueue once")
+require(all(detected[biome] == 1 for biome in biomes), "Each biome must be detected exactly once across dimensions")
+for name, text in detect_texts.items():
+    require("data remove storage biomevisible:macro biome" in text, f"Detect {name} must clear the stale biome first")
+    require(
+        text.rstrip().endswith("execute if data storage biomevisible:macro biome run function biomevisible:player/discover with storage biomevisible:macro"),
+        f"Detect {name} must enqueue once after all biome checks",
+    )
+detect_dimension = (pack_root / "data/biomevisible/function/player/detect_dimension.mcfunction").read_text(encoding="utf-8")
+require(
+    "execute if dimension minecraft:the_nether run function biomevisible:player/detect/nether" in detect_dimension
+    and "execute if dimension minecraft:the_end run function biomevisible:player/detect/end" in detect_dimension
+    and "execute unless dimension minecraft:the_nether unless dimension minecraft:the_end run function biomevisible:player/detect/overworld" in detect_dimension,
+    "Detection must dispatch by dimension",
+)
+online_tick = (pack_root / "data/biomevisible/function/player/online_tick.mcfunction").read_text(encoding="utf-8")
+online_lines = online_tick.splitlines()
+for axis in ("[0]", "[1]", "[2]"):
+    require(
+        f"execute store result score @s bv.{'xyz'[int(axis[1])]} run data get entity @s Pos{axis} 1" in online_lines,
+        f"Online tick must read Pos{axis} with scale 1 (rounded down)",
+    )
+for current, last in (("x", "lx"), ("y", "ly"), ("z", "lz"), ("dim", "ldim")):
+    require(
+        f"execute unless score @s bv.{current} = @s bv.{last} run scoreboard players add @s bv.mv 1" in online_lines,
+        f"Position cache must compare bv.{current} against bv.{last}",
+    )
+    require(
+        f"scoreboard players operation @s bv.{last} @s bv.{current}" in online_lines,
+        f"Position cache must remember bv.{current}",
+    )
+require(
+    "execute if score @s bv.mv matches 1.. run function biomevisible:player/detect_dimension" in online_lines,
+    "Detection must run only after a position or dimension change",
+)
+require(
+    online_lines.index("execute if score @s bv.mv matches 1.. run function biomevisible:player/detect_dimension")
+    < online_lines.index("scoreboard players operation @s bv.lx @s bv.x"),
+    "Detection must run before the cache is updated",
+)
+require("execute if dimension minecraft:the_nether run scoreboard players set @s bv.dim 1" in online_lines, "Position cache must include the dimension")
+load_function = (pack_root / "data/biomevisible/function/load.mcfunction").read_text(encoding="utf-8")
+for objective in ("x", "y", "z", "lx", "ly", "lz", "dim", "ldim", "mv"):
+    require(
+        f"execute unless data storage biomevisible:state cache_initialized run scoreboard objectives add bv.{objective} dummy" in load_function,
+        f"Position cache is missing objective bv.{objective}",
+    )
 markers = Counter(re.findall(r"advancements=\{biomevisible:biome/([a-z0-9_]+)=true\}", detect))
-require(set(markers) == set(biomes) and all(markers[biome] == 2 for biome in biomes), "Detection must use each player's hidden advancement marker")
+require(set(markers) == set(biomes) and all(markers[biome] == 1 for biome in biomes), "Detection must use each player's hidden advancement marker")
 require(".seen." not in detect, "Advancement markers are the sole discovery history")
 
 discover = (pack_root / "data/biomevisible/function/player/discover.mcfunction").read_text(encoding="utf-8")
@@ -156,7 +208,7 @@ require('queue append value {key:"biome.minecraft.$(biome)"}' in discover, "Queu
 discover_lines = discover.splitlines()
 append_line = next((i for i, line in enumerate(discover_lines) if "queue append" in line), -1)
 grant_line = next((i for i, line in enumerate(discover_lines) if "advancement grant @s only biomevisible:biome/$(biome)" in line), -1)
-reward_line = next((i for i, line in enumerate(discover_lines) if "function biomevisible:player/reward_experience" in line), -1)
+reward_line = next((i for i, line in enumerate(discover_lines) if "experience add @s 5 points" in line), -1)
 require(append_line >= 0 and grant_line > append_line, "Discovery must grant its marker after enqueue")
 require("store success score @s bv.ok" in discover_lines[append_line], "Queue append success must be captured")
 require(
@@ -170,17 +222,15 @@ require(
     "Experience must be awarded only after a successful new marker grant",
 )
 
-reward_function = functions.get("biomevisible:player/reward_experience")
-require(reward_function is not None, "Missing player/reward_experience.mcfunction")
-reward_content = reward_function.read_text(encoding="utf-8")
-reward_commands = [line for line in reward_content.splitlines() if line and not line.startswith("#")]
-require(reward_commands == ["experience add @s 5 points"], "New discovery reward must be exactly 5 experience points")
+require(not (pack_root / "data/biomevisible/function/player/reward_experience.mcfunction").exists(), "Reward must live inside discover")
+experience_lines = [line for line in discover_lines if "experience add" in line]
+require(experience_lines == ["execute if score @s bv.ok matches 1 run experience add @s 5 points"], "New discovery reward must be exactly 5 experience points")
 reward_references = [
     name
     for name, path in functions.items()
-    if "function biomevisible:player/reward_experience" in path.read_text(encoding="utf-8")
+    if "experience add" in path.read_text(encoding="utf-8")
 ]
-require(reward_references == ["biomevisible:player/discover"], "Experience may only be called from new discovery")
+require(reward_references == ["biomevisible:player/discover"], "Experience may only be granted from new discovery")
 
 for biome in biomes:
     advancement_id = f"biomevisible:biome/{biome}"
@@ -252,8 +302,18 @@ dispatch = (pack_root / "data/biomevisible/function/player/dispatch.mcfunction")
 require("title @s times 20 60 20" in dispatch, "Title timing must be 20/60/20 ticks")
 require("execute store success score @s bv.ok run function biomevisible:player/send_title" in dispatch, "Dispatch must capture success of both title sends")
 require(
-    dispatch.index("send_title") < dispatch.index("data remove storage") < dispatch.index("cooldown set value 100"),
+    any(line.endswith("cooldown set value 10") for line in dispatch.splitlines()),
+    "Cooldown must be 10 polls (100 ticks) after a successful title",
+)
+require(
+    dispatch.index("send_title") < dispatch.index("data remove storage") < dispatch.index("cooldown set value 10"),
     "Dispatch must send, pop, then start cooldown",
+)
+tick_function = (pack_root / "data/biomevisible/function/tick.mcfunction").read_text(encoding="utf-8")
+require(
+    "execute if score #poll bv.poll matches 0 as @a at @s run function biomevisible:player/tick" in tick_function
+    and "matches 10.." in tick_function,
+    "Player checks must run once per 10 ticks",
 )
 
 print(

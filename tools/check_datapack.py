@@ -216,8 +216,18 @@ dispatch = (pack_root / "data/biomevisible/function/player/dispatch.mcfunction")
 require("title @s times 20 60 20" in dispatch, "Title timing must be 20/60/20 ticks")
 require("execute store success score @s bv.ok run function biomevisible:player/send_title" in dispatch, "Dispatch must capture success of both title sends")
 require(
-    dispatch.index("send_title") < dispatch.index("data remove storage") < dispatch.index("cooldown set value 100"),
+    any(line.endswith("cooldown set value 10") for line in dispatch.splitlines()),
+    "Cooldown must be 10 polls (100 ticks) after a successful title",
+)
+require(
+    dispatch.index("send_title") < dispatch.index("data remove storage") < dispatch.index("cooldown set value 10"),
     "Dispatch must send, pop, then start cooldown",
+)
+tick_function = (pack_root / "data/biomevisible/function/tick.mcfunction").read_text(encoding="utf-8")
+require(
+    "execute if score #poll bv.poll matches 0 as @a at @s run function biomevisible:player/tick" in tick_function
+    and "matches 10.." in tick_function,
+    "Player checks must run once per 10 ticks",
 )
 
 translation_status = "en_us + ru_ru" if ru_translations is not None else "en_us"

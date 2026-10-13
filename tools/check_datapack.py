@@ -194,24 +194,28 @@ with zipfile.ZipFile(args.client_jar) as client:
 send_title = (pack_root / "data/biomevisible/function/player/send_title.mcfunction").read_text(encoding="utf-8")
 send_lines = send_title.splitlines()
 subtitle_index = next((i for i, line in enumerate(send_lines) if "title @s subtitle " in line), -1)
-header_index = next((i for i, line in enumerate(send_lines) if "title @s title " in line), -1)
-require(subtitle_index >= 0 and header_index > subtitle_index, "Subtitle must be sent before the header title trigger")
+title_indices = [i for i, line in enumerate(send_lines) if "title @s title " in line]
+require(subtitle_index >= 0 and len(title_indices) == 3 and all(i > subtitle_index for i in title_indices),
+       "Subtitle must precede three dimension-specific title triggers")
 require(
     "store success score @s bv.ok run title @s subtitle " in send_lines[subtitle_index]
-    and any("unless score @s bv.ok matches 1 run return fail" in line for line in send_lines[subtitle_index + 1 : header_index]),
+    and any("unless score @s bv.ok matches 1 run return fail" in line for line in send_lines[subtitle_index + 1 : title_indices[0]]),
     "Title trigger must be skipped when subtitle sending fails",
 )
-require("return run title @s title " in send_lines[header_index], "Title function must return header command success")
+expected_colors = [("#ff7a5c", -12969454), ("#c4b5fd", -14804178), ("#fffffe", -12632258)]
 subtitle_component = json.loads(send_lines[subtitle_index].split("title @s subtitle ", 1)[1])
-header_component = json.loads(send_lines[header_index].split("title @s title ", 1)[1])
 require(subtitle_component == {"text": ""}, "Subtitle must clear any preceding subtitle")
-require(
-    header_component.get("translate") == "biomevisible.title.$(title_key)"
-    and header_component.get("font") == "biomevisible:title"
-    and header_component.get("color") == "#fffffe"
-    and header_component.get("shadow_color") == -12632258,
-    "Title must use the localized wrapped glyph and dedicated shader colors",
-)
+for idx, (exp_color, exp_shadow) in zip(title_indices, expected_colors):
+    require("$return run title @s title " in send_lines[idx] or "return run title @s title " in send_lines[idx],
+           "Each title trigger must return header command success")
+    component = json.loads(send_lines[idx].split("title @s title ", 1)[1])
+    require(
+        component.get("translate") == "biomevisible.title.$(title_key)"
+        and component.get("font") == "biomevisible:title"
+        and component.get("color") == exp_color
+        and component.get("shadow_color") == exp_shadow,
+        "Title must use the localized wrapped glyph and dimension-specific shader colors",
+    )
 dispatch = (pack_root / "data/biomevisible/function/player/dispatch.mcfunction").read_text(encoding="utf-8")
 require("title @s times 20 60 20" in dispatch, "Title timing must be 20/60/20 ticks")
 require("execute store success score @s bv.ok run function biomevisible:player/send_title" in dispatch, "Dispatch must capture success of both title sends")

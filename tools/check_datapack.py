@@ -128,13 +128,45 @@ for name, text in detect_texts.items():
         text.rstrip().endswith("execute if data storage biomevisible:macro biome run function biomevisible:player/discover with storage biomevisible:macro"),
         f"Detect {name} must enqueue once after all biome checks",
     )
-online_tick = (pack_root / "data/biomevisible/function/player/online_tick.mcfunction").read_text(encoding="utf-8")
+detect_dimension = (pack_root / "data/biomevisible/function/player/detect_dimension.mcfunction").read_text(encoding="utf-8")
 require(
-    "execute if dimension minecraft:the_nether run function biomevisible:player/detect/nether" in online_tick
-    and "execute if dimension minecraft:the_end run function biomevisible:player/detect/end" in online_tick
-    and "execute unless dimension minecraft:the_nether unless dimension minecraft:the_end run function biomevisible:player/detect/overworld" in online_tick,
+    "execute if dimension minecraft:the_nether run function biomevisible:player/detect/nether" in detect_dimension
+    and "execute if dimension minecraft:the_end run function biomevisible:player/detect/end" in detect_dimension
+    and "execute unless dimension minecraft:the_nether unless dimension minecraft:the_end run function biomevisible:player/detect/overworld" in detect_dimension,
     "Detection must dispatch by dimension",
 )
+online_tick = (pack_root / "data/biomevisible/function/player/online_tick.mcfunction").read_text(encoding="utf-8")
+online_lines = online_tick.splitlines()
+for axis in ("[0]", "[1]", "[2]"):
+    require(
+        f"execute store result score @s bv.{'xyz'[int(axis[1])]} run data get entity @s Pos{axis} 1" in online_lines,
+        f"Online tick must read Pos{axis} with scale 1 (rounded down)",
+    )
+for current, last in (("x", "lx"), ("y", "ly"), ("z", "lz"), ("dim", "ldim")):
+    require(
+        f"execute unless score @s bv.{current} = @s bv.{last} run scoreboard players add @s bv.mv 1" in online_lines,
+        f"Position cache must compare bv.{current} against bv.{last}",
+    )
+    require(
+        f"scoreboard players operation @s bv.{last} @s bv.{current}" in online_lines,
+        f"Position cache must remember bv.{current}",
+    )
+require(
+    "execute if score @s bv.mv matches 1.. run function biomevisible:player/detect_dimension" in online_lines,
+    "Detection must run only after a position or dimension change",
+)
+require(
+    online_lines.index("execute if score @s bv.mv matches 1.. run function biomevisible:player/detect_dimension")
+    < online_lines.index("scoreboard players operation @s bv.lx @s bv.x"),
+    "Detection must run before the cache is updated",
+)
+require("execute if dimension minecraft:the_nether run scoreboard players set @s bv.dim 1" in online_lines, "Position cache must include the dimension")
+load_function = (pack_root / "data/biomevisible/function/load.mcfunction").read_text(encoding="utf-8")
+for objective in ("x", "y", "z", "lx", "ly", "lz", "dim", "ldim", "mv"):
+    require(
+        f"execute unless data storage biomevisible:state cache_initialized run scoreboard objectives add bv.{objective} dummy" in load_function,
+        f"Position cache is missing objective bv.{objective}",
+    )
 markers = Counter(re.findall(r"advancements=\{biomevisible:biome/([a-z0-9_]+)=true\}", detect))
 require(set(markers) == set(biomes) and all(markers[biome] == 1 for biome in biomes), "Detection must use each player's hidden advancement marker")
 require(".seen." not in detect, "Advancement markers are the sole discovery history")

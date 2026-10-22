@@ -14,10 +14,10 @@ execute unless score @s bv.y = @s bv.ly run scoreboard players add @s bv.mv 1
 execute unless score @s bv.z = @s bv.lz run scoreboard players add @s bv.mv 1
 execute unless score @s bv.dim = @s bv.ldim run scoreboard players add @s bv.mv 1
 execute if score @s bv.mv matches 1.. run function biomevisible:player/detect_dimension
-scoreboard players operation @s bv.lx @s bv.x
-scoreboard players operation @s bv.ly @s bv.y
-scoreboard players operation @s bv.lz @s bv.z
-scoreboard players operation @s bv.ldim @s bv.dim
+scoreboard players operation @s bv.lx = @s bv.x
+scoreboard players operation @s bv.ly = @s bv.y
+scoreboard players operation @s bv.lz = @s bv.z
+scoreboard players operation @s bv.ldim = @s bv.dim
 $execute store result score @s bv.cd run data get storage biomevisible:state players."$(key)".cooldown 1
 execute if score @s bv.cd matches 1.. run scoreboard players remove @s bv.cd 1
 $execute store result storage biomevisible:state players."$(key)".cooldown int 1 run scoreboard players get @s bv.cd

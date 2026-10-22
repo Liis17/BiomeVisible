@@ -130,6 +130,7 @@ for tag_name, function_name in (("load", "biomevisible:load"), ("tick", "biomevi
 
 function_ref = re.compile(r"\bfunction\s+([a-z0-9_.-]+:[a-z0-9_./-]+)")
 advancement_ref = re.compile(r"\badvancement grant @s only ([a-z0-9_.-]+:[a-z0-9_./-]+)")
+nbt_in_path = re.compile(r"storage [a-z0-9_.\-]+\{")
 for path in functions.values():
     content = path.read_text(encoding="utf-8")
     for line_number, line in enumerate(content.splitlines(), start=1):
@@ -137,6 +138,10 @@ for path in functions.values():
         has_macro_variable = re.search(r"\$\([^()]+\)", line) is not None
         require(not line.startswith("$") or has_macro_variable, f"Macro prefix needs a variable: {location}")
         require("$(" not in line or line.startswith("$"), f"Macro variable needs '$' prefix: {location}")
+        require(
+            not nbt_in_path.search(line),
+            f"NBT argument must be separated from the storage path by a space: {location}",
+        )
     resolved_content = content.replace("$(biome)", "badlands")
     for reference in function_ref.findall(resolved_content):
         require(reference in functions, f"{path.relative_to(repo)} references missing function {reference}")
@@ -180,7 +185,7 @@ for current, last in (("x", "lx"), ("y", "ly"), ("z", "lz"), ("dim", "ldim")):
         f"Position cache must compare bv.{current} against bv.{last}",
     )
     require(
-        f"scoreboard players operation @s bv.{last} @s bv.{current}" in online_lines,
+        f"scoreboard players operation @s bv.{last} = @s bv.{current}" in online_lines,
         f"Position cache must remember bv.{current}",
     )
 require(
@@ -189,7 +194,7 @@ require(
 )
 require(
     online_lines.index("execute if score @s bv.mv matches 1.. run function biomevisible:player/detect_dimension")
-    < online_lines.index("scoreboard players operation @s bv.lx @s bv.x"),
+    < online_lines.index("scoreboard players operation @s bv.lx = @s bv.x"),
     "Detection must run before the cache is updated",
 )
 require("execute if dimension minecraft:the_nether run scoreboard players set @s bv.dim 1" in online_lines, "Position cache must include the dimension")

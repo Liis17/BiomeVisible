@@ -268,11 +268,18 @@ for language_index, language in enumerate(TITLE_LANGUAGES):
     require(png[:8] == b"\x89PNG\r\n\x1a\n", "Title atlas must be PNG")
     require(struct.unpack(">II", png[16:24]) == (1064, 1156), "Atlas dimensions must match title geometry")
 shader = (resource_root / "assets/minecraft/shaders/core/text.vsh").read_text()
+expected_colors = [("#ff7a5c", -12969454), ("#c4b5fd", -14804178), ("#fffffe", -12632258)]
 require("#ifdef IS_GUI" in shader and "biomeTitle || biomeShadow" in shader, "Title positioning must only target marked GUI text")
 require("ScreenSize.x * 0.7 / 266.0" in shader and "ScreenSize.y * 0.3 / 68.0" in shader, "Title must fit within the window")
 require("vec2(0.0, 40.0)" in shader and "12.0 / guiPerFramebufferPixel.y" in shader, "Title must anchor 12 GUI pixels below the top")
-
 require("floor(min(2.0 / guiPerFramebufferPixel.x" in shader and "round(pixelPosition)" in shader, "Title texels and origins must align with framebuffer pixels")
+for expected_color, expected_shadow in expected_colors:
+    for color in (int(expected_color[1:], 16), expected_shadow & 0xFFFFFFFF):
+        channels = ((color >> 16) & 0xFF, (color >> 8) & 0xFF, color & 0xFF)
+        require(
+            "vec3(%s.0, %s.0, %s.0) / 255.0" % channels in shader,
+            f"The shader must recognize the notification color {channels} so every dimension scales the title",
+        )
 with zipfile.ZipFile(args.client_jar) as client:
     require((resource_root / "assets/minecraft/shaders/core/text.fsh").read_bytes()
             == client.read("assets/minecraft/shaders/core/text.fsh"),
@@ -289,7 +296,6 @@ require(
     and any("unless score @s bv.ok matches 1 run return fail" in line for line in send_lines[subtitle_index + 1 : title_indices[0]]),
     "Title trigger must be skipped when subtitle sending fails",
 )
-expected_colors = [("#ff7a5c", -12969454), ("#c4b5fd", -14804178), ("#fffffe", -12632258)]
 subtitle_component = json.loads(send_lines[subtitle_index].split("title @s subtitle ", 1)[1])
 require(subtitle_component == {"text": ""}, "Subtitle must clear any preceding subtitle")
 for idx, (exp_color, exp_shadow) in zip(title_indices, expected_colors):

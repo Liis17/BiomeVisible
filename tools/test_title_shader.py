@@ -156,7 +156,8 @@ class TitleShaderTest(unittest.TestCase):
                             buffer = ctx.buffer(content)
                             buffer.bind_to_uniform_block(binding)
                             buffers.append(buffer)
-                    for color in [(255, 255, 254), (63, 63, 62), (255, 255, 255)]:
+                    for color in [(255, 255, 254), (255, 122, 92), (196, 181, 253),
+                                  (63, 63, 62), (58, 26, 18), (30, 27, 46), (255, 255, 255)]:
                         with self.subTest(window=(width, height), scale=scale, color=color):
                             vertices = [(-133., 0.), (133., 0.), (-133., 68.)]
                             data = b''.join(struct.pack('9f', x, y, 0., *(c / 255 for c in color), 1., 0., 0.)

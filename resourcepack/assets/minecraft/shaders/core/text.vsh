@@ -29,9 +29,14 @@ layout(location = 3) out vec2 texCoord0;
 void main() {
     vec4 position = ModelViewMat * vec4(Position, 1.0);
 #ifdef IS_GUI
-    // Dedicated title and shadow colors mark BiomeVisible without moving other text.
-    bool biomeTitle = all(lessThan(abs(Color.rgb - vec3(255.0, 255.0, 254.0) / 255.0), vec3(0.001)));
-    bool biomeShadow = all(lessThan(abs(Color.rgb - vec3(63.0, 63.0, 62.0) / 255.0), vec3(0.001)));
+    // Dedicated title and shadow colors mark BiomeVisible without moving other text:
+    // overworld, nether (#ff7a5c / #ff3a1a12) and end (#c4b5fd / #ff1e1b2e).
+    bool biomeTitle = all(lessThan(abs(Color.rgb - vec3(255.0, 255.0, 254.0) / 255.0), vec3(0.001)))
+        || all(lessThan(abs(Color.rgb - vec3(255.0, 122.0, 92.0) / 255.0), vec3(0.001)))
+        || all(lessThan(abs(Color.rgb - vec3(196.0, 181.0, 253.0) / 255.0), vec3(0.001)));
+    bool biomeShadow = all(lessThan(abs(Color.rgb - vec3(63.0, 63.0, 62.0) / 255.0), vec3(0.001)))
+        || all(lessThan(abs(Color.rgb - vec3(58.0, 26.0, 18.0) / 255.0), vec3(0.001)))
+        || all(lessThan(abs(Color.rgb - vec3(30.0, 27.0, 46.0) / 255.0), vec3(0.001)));
     if (biomeTitle || biomeShadow) {
         vec2 screen = round(vec2(2.0 / ProjMat[0][0], -2.0 / ProjMat[1][1]));
         // Two 133 x 68 glyphs form a card; vanilla titles use scale 4 and y = -10.
